@@ -1,0 +1,128 @@
+### Importing Data from IMDB Dataset, limiting to top 10000 words
+
+#import IMDB dataset, with only 10000 most frequently used words
+from tensorflow.keras.datasets import imdb
+(train_data, train_labels), (test_data, test_labels) = imdb.load_data(
+    num_words=10000)
+
+#display numbers corresponding to first review
+train_data[0]
+
+#display whether first review is positive or negative
+train_labels[0]
+
+#insure that highest number in training data does not exceed 10000
+max([max(sequence) for sequence in train_data])
+
+#convert integers corresponding to each word back to text (for testing purposes)
+word_index = imdb.get_word_index()
+reverse_word_index = dict(
+    [(value, key) for (key, value) in word_index.items()])
+decoded_review = " ".join(
+    [reverse_word_index.get(i - 3, "?") for i in train_data[0]])
+
+#insure that integer to text conversion is coherent (testing above block)
+decoded_review
+
+import numpy as np
+#make each review the same size and put 0s where there are blanks in the tensor
+def vectorize_sequences(sequences, dimension=10000):
+    results = np.zeros((len(sequences), dimension))
+#multi-hot encode the words that appear in the review. Only measure presence of word, not its count.
+    for i, sequence in enumerate(sequences):
+        for j in sequence:
+            results[i, j] = 1.
+    return results
+x_train = vectorize_sequences(train_data)
+x_test = vectorize_sequences(test_data)
+
+#testing that training results correspond to possible target values
+x_train[0]
+
+#convert labels to decimals, so the computer can easily interpret them
+y_train = np.asarray(train_labels).astype("float32")
+y_test = np.asarray(test_labels).astype("float32")
+
+### This next section experiments with different models to see which one has best validation accuracy.
+
+from tensorflow import keras
+from tensorflow.keras import layers
+#create a sequential neural network 
+model = keras.Sequential([
+    layers.Dense(16, activation="relu"),
+    layers.Dropout(0.5),
+    layers.Dense(8, activation="relu"),
+    layers.Dropout(0.5),
+#convert output into probability of 1 or 0 (positive or negative review)
+    layers.Dense(1, activation="sigmoid")
+])
+
+#compile model. Choose backpropagation function to optimize model.
+model.compile(optimizer="rmsprop",
+#choose loss function to measure the amount of error.
+              loss="binary_crossentropy",
+#Use accuracy as measure of success, as opposed to another confusion matrix measure.
+              metrics=["accuracy"])
+
+#Manually set aside a training and validation set
+x_val = x_train[:10000]
+partial_x_train = x_train[10000:]
+y_val = y_train[:10000]
+partial_y_train = y_train[10000:]
+
+#Train model based on training data, iterating a set number of times (epochs) with a sample size corresponding to batch size.
+#Compare to validation model. Store trained model into "history" variable.
+history = model.fit(partial_x_train,
+                    partial_y_train,
+                    epochs=20,
+                    batch_size=512,
+                    validation_data=(x_val, y_val))
+
+#put epoch history values into dictionary
+history_dict = history.history
+history_dict.keys()
+
+#plot training and validation loss based on historical epochs from model
+import matplotlib.pyplot as plt
+history_dict = history.history
+loss_values = history_dict["loss"]
+val_loss_values = history_dict["val_loss"]
+epochs = range(1, len(loss_values) + 1)
+plt.plot(epochs, loss_values, "bo", label="Training loss")
+plt.plot(epochs, val_loss_values, "b", label="Validation loss")
+plt.title("Training and validation loss")
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
+
+#plotting accuracy of model on training set versus holdout (validation) set
+plt.clf()
+acc = history_dict["accuracy"]
+val_acc = history_dict["val_accuracy"]
+plt.plot(epochs, acc, "bo", label="Training acc")
+plt.plot(epochs, val_acc, "b", label="Validation acc")
+plt.title("Training and validation accuracy")
+plt.xlabel("Epochs")
+plt.ylabel("Accuracy")
+plt.legend()
+plt.show()
+
+### New Model to See Effectiveness on Test Data
+
+#make new model with same parameters to test effectiveness of model on unseen data
+validation_model = keras.Sequential([
+    layers.Dense(16, activation="relu"),
+    layers.Dropout(0.5),
+    layers.Dense(8, activation="relu"),
+    layers.Dropout(0.5),
+    layers.Dense(1, activation="sigmoid")
+])
+validation_model.compile(optimizer="rmsprop",
+              loss="binary_crossentropy",
+              metrics=["accuracy"])
+validation_model.fit(x_train, y_train, epochs=7, batch_size=512)
+results = validation_model.evaluate(x_test, y_test)
+results
+
+validation_model.predict(x_test)
